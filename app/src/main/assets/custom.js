@@ -1,138 +1,201 @@
-// 🚫 МЕГА БЛОКИРОВЩИК РЕКЛАМЫ - ВСЕ В ОДНОМ
-(function () {
+// JavaScript версия uBlock Origin - основные функции
+(function() {
     'use strict';
-
-    console.log('🚫 Запуск МЕГА блокировщика рекламы...');
-
-    // 📋 СПИСКИ ДЛЯ БЛОКИРОВКИ
-    let adSelectors = [
-        '.ad', '.ads', '.advertisement', '.banner', '.popup', '.adsbygoogle',
-        '.ad-container', '.ad-banner', '.ad-block', '.sponsored', '.promo',
-        '.commercial', '.adsense', 'ins[class*="adsbygoogle"]', '.google-ad',
-        '.gpt-ad', 'div[id*="google_ads"]', '.yandex-ad', '.begun-ad',
-        '.criteo-ad', '.outbrain', '.taboola', '.mgid', '.video-ad',
-        '.mobile-ad', '.interstitial', '.app-ad', '#ad', '#ads', '#banner'
-    ];
-
-    let adDomains = [
+    
+    console.log('🛡️ uBlock Origin JS запущен');
+    
+    // EasyList правила (упрощенная версия)
+    const easyListRules = [
+        // Домены
         'googlesyndication.com', 'googleadservices.com', 'doubleclick.net',
-        'googletagmanager.com', 'google-analytics.com', 'x47b2v9.com',
-        's.x47b2v9.com', 'popads.net', 'popcash.net', 'propellerads.com',
-        'an.yandex.ru', 'adfox.ru', 'begun.ru', 'adriver.ru', 'criteo.com',
-        'outbrain.com', 'taboola.com', 'media.net', 'adnxs.com'
+        'x47b2v9.com', 's.x47b2v9.com', 'popads.net', 'popcash.net',
+        'propellerads.com', 'adnxs.com', 'adsystem.com', 'criteo.com',
+        
+        // Селекторы
+        '.ad', '.ads', '.advertisement', '.banner', '.adsbygoogle',
+        '.sponsored', '.promo', '#ad', '#ads',
+        
+        // Паттерны URL
+        '/ads/', '/banner/', '/popup/', '/d.php'
     ];
-
-    // 🎯 ПРОВЕРКА НА РЕКЛАМУ
-    function isAdDomain(url) {
+    
+    // Проверка правил как в uBlock Origin
+    function matchesFilter(url, element) {
         if (!url) return false;
-
-        // Проверяем известные домены
-        if (adDomains.some(domain => url.includes(domain))) {
-            return true;
+        
+        // Проверяем домены
+        for (const rule of easyListRules) {
+            if (rule.includes('.com') || rule.includes('.net') || rule.includes('.org')) {
+                if (url.includes(rule)) return true;
+            }
         }
-
-        // Агрессивные паттерны
-        const patterns = [
-            /[a-z0-9]{6,}\.com\/d\.php/i,
-            /[a-z0-9]{6,}\.com\/[a-z]\.php/i,
-            /\/ads?\//i, /\/banner/i, /\/popup/i,
-            /clickfunnels|popunder|interstitial/i
-        ];
-
-        return patterns.some(pattern => pattern.test(url));
-    }
-
-    // 🔥 ПЕРЕХВАТ СЕТЕВЫХ ЗАПРОСОВ
-    function interceptRequests() {
-        // Fetch
-        const origFetch = window.fetch;
-        window.fetch = function (url) {
-            const urlStr = typeof url === 'string' ? url : url.toString();
-            if (isAdDomain(urlStr)) {
-                console.log('🚫 FETCH заблокирован:', urlStr);
-                return Promise.reject('blocked');
+        
+        // Проверяем паттерны URL
+        for (const rule of easyListRules) {
+            if (rule.startsWith('/') && rule.endsWith('/')) {
+                if (url.includes(rule.slice(1, -1))) return true;
             }
-            return origFetch.apply(this, arguments);
+        }
+        
+        // Проверяем селекторы элементов
+        if (element) {
+            for (const rule of easyListRules) {
+                if (rule.startsWith('.') || rule.startsWith('#')) {
+                    if (element.matches && element.matches(rule)) return true;
+                    if (element.closest && element.closest(rule)) return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    // Блокировка сетевых запросов (как в uBlock Origin)
+    function blockNetworkRequests() {
+        // Fetch API
+        const originalFetch = window.fetch;
+        window.fetch = function(resource, options) {
+            const url = typeof resource === 'string' ? resource : resource.url;
+            
+            // Разрешаем запросы к тому же домену
+            if (url.startsWith('/') || url.includes(window.location.hostname)) {
+                return originalFetch.apply(this, arguments);
+            }
+            
+            if (matchesFilter(url)) {
+                console.log('🛡️ uBlock: FETCH заблокирован', url);
+                return Promise.reject(new Error('uBlock: blocked'));
+            }
+            
+            return originalFetch.apply(this, arguments);
         };
-
+        
         // XMLHttpRequest
-        const origOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function (method, url) {
-            if (isAdDomain(url)) {
-                console.log('🚫 XHR заблокирован:', url);
+        const originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+            // Разрешаем запросы к тому же домену
+            if (url && (url.startsWith('/') || url.includes(window.location.hostname))) {
+                return originalOpen.apply(this, arguments);
+            }
+            
+            if (matchesFilter(url)) {
+                console.log('🛡️ uBlock: XHR заблокирован', url);
                 return;
             }
-            return origOpen.apply(this, arguments);
+            
+            return originalOpen.apply(this, arguments);
         };
     }
-
-    // 🧹 УДАЛЕНИЕ РЕКЛАМНЫХ ЭЛЕМЕНТОВ
-    function removeAds() {
-        let removed = 0;
-
-        // По селекторам
-        adSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => {
-                el.remove();
-                removed++;
-            });
+    
+    // Блокировка элементов DOM (как в uBlock Origin)
+    function blockDOMElements() {
+        // Удаляем существующие элементы
+        easyListRules.forEach(rule => {
+            if (rule.startsWith('.') || rule.startsWith('#')) {
+                document.querySelectorAll(rule).forEach(el => {
+                    console.log('🛡️ uBlock: Элемент удален', rule);
+                    el.remove();
+                });
+            }
         });
-
-        // Специально для вашего HTML - элементы с заголовком "AD"
+        
+        // Специальная обработка для вашего случая
         document.querySelectorAll('div.item.thumb').forEach(item => {
-            const adHeader = item.querySelector('header');
-            if (adHeader && adHeader.textContent.trim() === 'AD') {
-                console.log('🚫 Удален блок с заголовком AD');
+            const header = item.querySelector('header');
+            if (header && header.textContent.trim() === 'AD') {
+                console.log('🛡️ uBlock: Реклама с заголовком AD удалена');
                 item.remove();
-                removed++;
                 return;
             }
-
-            const adLink = item.querySelector('a[href*="x47b2v9.com"], a[title="Advertisement"]');
-            if (adLink) {
-                console.log('🚫 Удален рекламный блок');
+            
+            const link = item.querySelector('a[href*="x47b2v9.com"], a[title="Advertisement"]');
+            if (link) {
+                console.log('🛡️ uBlock: Рекламный блок удален');
                 item.remove();
-                removed++;
             }
         });
-
-        // Удаляем любые ссылки на рекламные домены
+        
+        // Удаляем элементы с рекламными ссылками
         document.querySelectorAll('*[src], *[href]').forEach(el => {
             const url = el.src || el.href;
-            if (url && isAdDomain(url)) {
+            if (matchesFilter(url, el)) {
                 const parent = el.closest('.item') || el.closest('div') || el;
+                console.log('🛡️ uBlock: Элемент с рекламной ссылкой удален');
                 parent.remove();
-                removed++;
             }
         });
-
-        if (removed > 0) {
-            console.log(`🚫 Удалено ${removed} рекламных элементов`);
-        }
     }
-
-    // Кнопка удалена - не нужна
-
-    // Режим ручного удаления убран - не нужен
-
-    // Уведомления убраны - не нужны
-
-    // 🔗 ВАШ СУЩЕСТВУЮЩИЙ КОД С УЛУЧШЕНИЯМИ
+    
+    // Блокировка всплывающих окон (как в uBlock Origin)
+    function blockPopups() {
+        const originalWindowOpen = window.open;
+        window.open = function(url, target, features) {
+            // Разрешаем окна с того же домена (нужные для сайта)
+            if (!url || url.startsWith('/') || url.includes(window.location.hostname)) {
+                console.log('🛡️ uBlock: Разрешено окно с того же домена');
+                return originalWindowOpen.call(this, url, target, features);
+            }
+            
+            if (matchesFilter(url)) {
+                console.log('🛡️ uBlock: Всплывающее окно заблокировано', url);
+                return null;
+            }
+            
+            return originalWindowOpen.call(this, url, target, features);
+        };
+    }
+    
+    // Наблюдатель за изменениями DOM (как в uBlock Origin)
+    function observeDOM() {
+        const observer = new MutationObserver(mutations => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) { // Element node
+                        // Проверяем новый элемент
+                        if (matchesFilter(node.src || node.href, node)) {
+                            console.log('🛡️ uBlock: Новый рекламный элемент заблокирован');
+                            node.remove();
+                            return;
+                        }
+                        
+                        // Проверяем вложенные элементы
+                        if (node.querySelectorAll) {
+                            easyListRules.forEach(rule => {
+                                if (rule.startsWith('.') || rule.startsWith('#')) {
+                                    node.querySelectorAll(rule).forEach(el => {
+                                        console.log('🛡️ uBlock: Вложенный рекламный элемент удален');
+                                        el.remove();
+                                    });
+                                }
+                            });
+                        }
+                    }
+                });
+            });
+            
+            // Периодическая очистка после изменений
+            setTimeout(blockDOMElements, 100);
+        });
+        
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+    }
+    
+    // Ваш существующий код
     const hookClick = (e) => {
         const origin = e.target.closest('a');
         const isBaseTargetBlank = document.querySelector('head base[target="_blank"]');
-
-        // АГРЕССИВНАЯ БЛОКИРОВКА РЕКЛАМНЫХ КЛИКОВ
-        if (origin && origin.href) {
-            if (isAdDomain(origin.href) || origin.title === 'Advertisement') {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🚫 КЛИК ЗАБЛОКИРОВАН:', origin.href);
-                showNotification('🚫 Рекламный клик заблокирован!', '#ff4444');
-                return false;
-            }
+        
+        // Блокируем рекламные клики
+        if (origin && origin.href && matchesFilter(origin.href, origin)) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🛡️ uBlock: Клик по рекламе заблокирован', origin.href);
+            return false;
         }
-
+        
         console.log('origin', origin, isBaseTargetBlank);
         if ((origin && origin.href && origin.target === '_blank') ||
             (origin && origin.href && isBaseTargetBlank)) {
@@ -143,58 +206,40 @@
             console.log('not handle origin', origin);
         }
     };
-
-    // БЛОКИРОВКА WINDOW.OPEN
-    window.open = function (url, target, features) {
-        console.log('open', url, target, features);
-
-        if (isAdDomain(url)) {
-            console.log('🚫 WINDOW.OPEN ЗАБЛОКИРОВАН:', url);
-            return null;
-        }
-
-        location.href = url;
-    };
-
-    // 🚀 ИНИЦИАЛИЗАЦИЯ ВСЕГО
-    function initMegaAdBlock() {
-        console.log('🚀 Инициализация МЕГА блокировщика...');
-
-        // Перехватываем сетевые запросы
-        interceptRequests();
-
-        // Удаляем существующую рекламу
-        removeAds();
-
+    
+    // Инициализация uBlock Origin JS
+    function initUBlockJS() {
+        console.log('🛡️ Инициализация uBlock Origin JS...');
+        
+        // Запускаем все модули
+        blockNetworkRequests();
+        blockDOMElements();
+        blockPopups();
+        observeDOM();
+        
         // Устанавливаем обработчик кликов
         document.addEventListener('click', hookClick, { capture: true });
-
-        // Наблюдатель за новыми элементами
-        new MutationObserver(mutations => {
-            mutations.forEach(mutation => {
-                if (mutation.addedNodes.length > 0) {
-                    setTimeout(removeAds, 100);
-                }
+        
+        // Периодическая очистка (как в uBlock Origin)
+        setInterval(blockDOMElements, 2000);
+        
+        // Дополнительная очистка для x47b2v9.com
+        setInterval(() => {
+            document.querySelectorAll('*[href*="x47b2v9.com"], *[src*="x47b2v9.com"]').forEach(el => {
+                const parent = el.closest('.item') || el.closest('div') || el;
+                parent.remove();
             });
-        }).observe(document.body, { childList: true, subtree: true });
-
-        // Периодическая очистка
-        setInterval(removeAds, 2000);
-
-        // Глобальные функции
-        window.blockDomain = function (domain) {
-            adDomains.push(domain);
-            console.log('🚫 Домен добавлен в блокировку:', domain);
-        };
-
-        console.log('✅ МЕГА блокировщик активирован!');
+        }, 1000);
+        
+        console.log('🛡️ uBlock Origin JS активирован!');
+        console.log('🛡️ Загружено правил:', easyListRules.length);
     }
-
-    // ЗАПУСК
+    
+    // Запуск
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initMegaAdBlock);
+        document.addEventListener('DOMContentLoaded', initUBlockJS);
     } else {
-        initMegaAdBlock();
+        initUBlockJS();
     }
-
+    
 })();
